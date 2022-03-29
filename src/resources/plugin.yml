@@ -1,0 +1,6 @@
+name: Adeyaka
+main: gl.ky.adeyaka.Adeyaka
+version: 1.0.0
+author: kouyoux
+description: use chinese to make nice effect
+load: STARTUP
