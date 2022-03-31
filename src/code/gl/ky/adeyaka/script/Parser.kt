@@ -1,16 +1,15 @@
 package gl.ky.adeyaka.script
 
-import gl.ky.adeyaka.script.TokenStream.Companion.eatIfPresent
-import gl.ky.adeyaka.script.TokenStream.Companion.expect
-import gl.ky.adeyaka.script.TokenStream.Companion.isNext
+import gl.ky.adeyaka.script.GetAs.Type.*
+import java.util.*
+import java.util.regex.Matcher
 
 fun main() {
-    val t = Lexer.lex("""
+    val t = """
         特效组"adeyaka"{
             设置a为1；b为#b；c为{Kouyou};d为“d”
         }
-        """.trimIndent())
-    println(t)
+        """.trimIndent()
     println(Parser.parseFile(t).toString())
 }
 
@@ -40,58 +39,34 @@ class Sentence(val clauses: List<Clause>) : ASTNode {
     }
 }
 
-sealed interface Clause : ASTNode
+class Clause(val words: List<Word>) : ASTNode
+
+sealed interface Word : ASTNode
 
 /**
  * 动词，一个句中要执行的动作
- * 可以自带一些参数，优先于别的副词提供的参数
  */
-class Verb(val name: String, val data: Map<String, Expr>) : Clause {
-    override fun toString() = buildString {
-        append("      动词 $name 带有参数 {\n")
-        data.forEach { (k, v) ->
-            append("        $k = ")
-            append(v)
-            append("\n")
-        }
-        append("      }\n")
-    }
-}
+class Verb(val name: String) : Word
 
 /**
  * 副词，为一个句中的动作提供参数
  */
-class Adverb(val data: Map<String, Expr>) : Clause {
-    override fun toString() = buildString {
-        append("      副词 {\n")
-        data.forEach { (k, v) ->
-            append("        $k = ")
-            append(v)
-            append("\n")
+class Adverb(val name: String, val value: Expr) : Word
+
+sealed interface Expr : ASTNode {
+    class Var(val name: String) : Expr
+    class Bool private constructor(val value: Boolean) : Expr {
+        companion object {
+            @JvmStatic
+            val TRUE = Bool(true)
+            @JvmStatic
+            val FALSE = Bool(false)
         }
-        append("      }\n")
     }
-}
-
-sealed interface Expr : ASTNode
-
-class Variable(val name: String) : Expr {
-    override fun toString() = "变量 [name]"
-}
-class Bool(val value: Boolean) : Expr {
-    override fun toString() = "布尔值 [$value]"
-}
-class Number(val value: Double) : Expr {
-    override fun toString() = "数值 [$value]"
-}
-class Str(val value: String) : Expr {
-    override fun toString() = "字符串 [$value]"
-}
-class Player(val name: String) : Expr {
-    override fun toString() = "玩家 [$name]"
-}
-class Position(val x: Double, val y: Double, val z: Double) : Expr {
-    override fun toString() = "坐标 [$x, $y, $z]"
+    class Num(val value: Double) : Expr
+    class Str(val value: String) : Expr
+    class Player(val name: String) : Expr
+    class Pos(val x: Double, val y: Double, val z: Double) : Expr
 }
 
 // Parser
@@ -99,112 +74,155 @@ class Position(val x: Double, val y: Double, val z: Double) : Expr {
 /**
  * 解析整个文件的 Parser
  */
-object Parser {
-    val parsers = mutableListOf<ClauseParser>(
-        SetClauseParser,
-    )
+class Parser(val input: String, val rules: List<Rule>) {
+    fun get(): ScriptFile = parseFile()
 
-    fun register(name: String, parser: ClauseParser) {
-        parsers.add(parser)
+    class ParseException(val pos: Int, val msg: String) : RuntimeException("At pos $pos : $msg")
+
+    object Keywords {
+        const val SCRIPT_GROUP = "脚本组"
     }
 
-    fun parseFile(input: TokenStream): ScriptFile {
+    private var offset = 0
+    private var savepoint: Stack<Int> = Stack()
+
+    private inline fun save() { savepoint.push(offset) }
+    private inline fun recover() { offset = savepoint.pop() }
+    private inline fun cancel() { savepoint.pop() }
+    private inline fun hasMore() = offset < input.length
+    private inline fun skipWhitespace() { while (input[offset].isWhitespace()) offset++ }
+    private inline fun expect(str: String) {
+        skipWhitespace()
+        if (isNext(str)) skip(str.length)
+            else throw ParseException(offset, "Expected $str")
+        skipWhitespace()
+    }
+    private inline fun isNext(str: String): Boolean {
+        skipWhitespace()
+        return input.startsWith(str, offset).also { skipWhitespace() }
+    }
+    private inline fun eatIfPresent(str: String): Boolean {
+        skipWhitespace()
+        if (isNext(str)) {
+            skip(str.length)
+            skipWhitespace()
+            return true
+        }
+        return false
+    }
+    private inline fun skip(i: Int) { offset += i }
+
+    private fun parseFile(): ScriptFile {
         val groups = mutableListOf<ScriptGroup>()
-        while (!input.isNext(TokenType.EOF)) {
-            groups.add(parseGroup(input))
+        while(hasMore()) {
+            groups.add(parseGroup())
         }
         return ScriptFile(groups)
     }
 
-    fun parseGroup(input: TokenStream): ScriptGroup {
-        input.expect(TokenType.KW_GROUP)
-        val name = input.expect(TokenType.SYMBOL).value
-        input.expect(TokenType.LBRACE)
+    private fun parseGroup(): ScriptGroup {
+        expect("脚本组")
+        val name = expectStr().value
+        expect("{")
         val sens = mutableListOf<Sentence>()
-        while(input.eatIfPresent(TokenType.EOS));
-        while (!input.isNext(TokenType.RBRACE)) {
-            sens.add(parseSentence(input))
-            while(input.eatIfPresent(TokenType.EOS));
+        while(input[offset] != '}') {
+            sens.add(parseSentence())
         }
-        input.expect(TokenType.RBRACE)
+        expect("}")
         return ScriptGroup(name, sens)
     }
 
-    fun parseSentence(input: TokenStream): Sentence {
+    private fun parseSentence(): Sentence {
         val clauses = mutableListOf<Clause>()
-        while (!input.isNext(TokenType.EOS) && !input.isNext(TokenType.RBRACE)) {
-            clauses.addAll(parseClause(input))
-        }
+        do {
+            clauses.add(parseClause())
+        } while (input[offset] == '，')
         return Sentence(clauses)
     }
 
-    fun parseClause(input: TokenStream): List<Clause> {
-        return parsers.first { it.canParse(input) }.parse(input)
+    private fun parseClause(): Clause {
+        for (rule in rules) {
+            val result = tryRule(rule)
+            if (result != null) return result
+        }
+        throw ParseException(offset, "No rule matched")
     }
 
-    fun parseExpr(input: TokenStream): Expr {
-        return when (input.peek().type) {
-            TokenType.HASH -> {
-                input.expect(TokenType.HASH)
-                val name = input.expect(TokenType.SYMBOL).value
-                Variable(name)
+    private fun tryRule(rule: Rule): Clause? {
+        val words = mutableListOf<Word>()
+        for (component in rule.components) {
+            save()
+            try {
+                when(component) {
+                    is VerbMatch -> {
+                        expect(component.verb)
+                        words.add(Verb(component.verb))
+                    }
+                    is Match -> {
+                        expect(component.s)
+                    }
+                    is GetAs -> {
+                        val value = when(component.type) {
+                            ANY -> expectAny()
+                            STRING -> expectStr()
+                            NUMBER -> expectNum()
+                            BOOL -> expectBool()
+                            POSITION -> expectPos()
+                            PLAYER -> expectPlayer()
+                        }
+                        words.add(Adverb(component.name, value))
+                    }
+                }
+            } catch (e: ParseException) {
+                recover()
+                return null
             }
-            TokenType.SYMBOL -> {
-                Str(input.expect(TokenType.SYMBOL).value)
-            }
-            TokenType.NUMBER -> {
-                Number(input.expect(TokenType.NUMBER).value.toDouble())
-            }
-            TokenType.BOOL -> {
-                Bool(when(input.next().value) {
-                    "true", "yes", "真", "是" -> true
-                    "false", "no", "假", "否" -> false
-                    else -> throw IllegalArgumentException("Invalid bool value: ${input.peek().value}")
-                })
-            }
-            TokenType.LBRACKET -> {
-                input.expect(TokenType.LBRACKET)
-                val x = input.expect(TokenType.NUMBER).value.toDouble()
-                input.expect(TokenType.COMMA)
-                val y = input.expect(TokenType.NUMBER).value.toDouble()
-                input.expect(TokenType.COMMA)
-                val z = input.expect(TokenType.NUMBER).value.toDouble()
-                input.expect(TokenType.RBRACKET)
-                Position(x, y, z)
-            }
-            TokenType.LBRACE -> {
-                input.expect(TokenType.LBRACE)
-                val name = input.expect(TokenType.SYMBOL).value
-                input.expect(TokenType.RBRACE)
-                Player(name)
-            }
-            else -> throw IllegalArgumentException("Expected expression, got ${input.peek().type}")
+            cancel()
+        }
+        return Clause(words)
+    }
+
+    private fun expectAny(): Expr {
+        TODO()
+    }
+
+    private fun expectStr(): Expr.Str {
+        TODO()
+    }
+    private fun expectNum(): Expr.Num {
+        assert(input[offset] == '-' || input[offset] in '0'..'9')
+
+    }
+    private fun expectBool(): Expr.Bool {
+        return when {
+            eatIfPresent("真") -> Expr.Bool.TRUE
+            eatIfPresent("假") -> Expr.Bool.FALSE
+            eatIfPresent("是") -> Expr.Bool.TRUE
+            eatIfPresent("否") -> Expr.Bool.FALSE
+            eatIfPresent("true") -> Expr.Bool.TRUE
+            eatIfPresent("false") -> Expr.Bool.FALSE
+            else -> throw ParseException(offset, "Expected bool")
         }
     }
-}
-
-/**
- * 将一段分句转换为一些词
- * 一个分句一般为一个 EOC 到 下一个 EOC 的区间
- */
-interface ClauseParser {
-    fun canParse(tokenStream: TokenStream): Boolean
-    fun parse(input: TokenStream): List<Clause>
-}
-
-object SetClauseParser : ClauseParser {
-    override fun canParse(tokenStream: TokenStream) = tokenStream.isNext(TokenType.KW_SET)
-    override fun parse(input: TokenStream): List<Clause> {
-        input.expect(TokenType.KW_SET)
-        val assigns = mutableMapOf<String, Expr>()
-        do {
-            input.eatIfPresent(TokenType.SEMICOLON)
-            val name = input.expect(TokenType.SYMBOL).value
-            input.expect(TokenType.KW_ASSIGN)
-            val expr = Parser.parseExpr(input)
-            assigns[name] = expr
-        } while (input.isNext(TokenType.SEMICOLON))
-        if(input.eatIfPresent(TokenType.COMMA)) input.eatIfPresent(TokenType.EOS)
-        return listOf(Verb("set", assigns))
+    private fun expectPos(): Expr.Pos {
+        expect("[")
+        val x = expectNum().value
+        expect(",")
+        val y = expectNum().value
+        expect(",")
+        val z = expectNum().value
+        expect("]")
+        return Expr.Pos(x, y, z)
+    }
+    private fun expectPlayer(): Expr.Player {
+        expect("{")
+        val name = expectStr().value
+        expect("}")
+        return Expr.Player(name)
+    }
+    private fun expectVar(): Expr.Var {
+        expect("#")
+        val name = expectStr().value
+        return Expr.Var(name)
     }
 }
