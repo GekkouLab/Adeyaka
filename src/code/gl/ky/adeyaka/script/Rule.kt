@@ -1,12 +1,52 @@
 package gl.ky.adeyaka.script
 
 fun main() {
-    println(parseRule("{设置} <name:string> 为 <value:any>"))
+    println(Rule.fromString("{设置} <name:string> 为 <value:any>"))
 }
 
 class Rule(val components: List<RuleComponent>) {
     override fun toString(): String {
         return components.joinToString(" ")
+    }
+
+    companion object {
+        /**
+         * Rule example: {设置} <name:string> 为 <value:any>
+         *     -> Rule(listOf(VerbMatch("设置"), GetAs("name", GetAs.Type.STRING), Match("为"), GetAs("value", GetAs.Type.ANY)))
+         */
+        @JvmStatic
+        fun fromString(rule: String): Rule {
+            var i = 0
+            val components = mutableListOf<RuleComponent>()
+            while(i < rule.length) {
+                when(rule[i]) {
+                    '{' -> {
+                        val verb = rule.substring(i + 1, rule.indexOf('}', i))
+                        components.add(VerbMatch(verb))
+                        i += verb.length + 2
+                    }
+                    '<' -> {
+                        val get = rule.substring(i + 1, rule.indexOf('>', i))
+                        get.split(':').let { components.add(GetAs(it[0], GetAs.Type.valueOf(it[1]))) }
+                        i += get.length + 2
+                    }
+                    ' ' -> {
+                        i++
+                    }
+                    else -> {
+                        val value = rule.substring(i, rule.indexOf(' ', i))
+                        components.add(Match(value))
+                        i += value.length
+                    }
+                }
+            }
+            return Rule(components)
+        }
+
+        @JvmStatic
+        fun String.toRule(): Rule {
+            return fromString(this)
+        }
     }
 }
 
@@ -39,34 +79,4 @@ class Match(val s: String) : RuleComponent {
     }
 }
 
-/**
- * Rule example: {设置} <name:string> 为 <value:any>
- *     -> Rule(listOf(VerbMatch("设置"), GetAs("name", GetAs.Type.STRING), Match("为"), GetAs("value", GetAs.Type.ANY)))
- */
-fun parseRule(rule: String): Rule {
-    var i = 0
-    val components = mutableListOf<RuleComponent>()
-    while(i < rule.length) {
-        when(rule[i]) {
-            '{' -> {
-                val verb = rule.substring(i + 1, rule.indexOf('}', i))
-                components.add(VerbMatch(verb))
-                i += verb.length + 2
-            }
-            '<' -> {
-                val get = rule.substring(i + 1, rule.indexOf('>', i))
-                get.split(':').let { components.add(GetAs(it[0], GetAs.Type.valueOf(it[1]))) }
-                i += get.length + 2
-            }
-            ' ' -> {
-                i++
-            }
-            else -> {
-                val value = rule.substring(i, rule.indexOf(' ', i))
-                components.add(Match(value))
-                i += value.length
-            }
-        }
-    }
-    return Rule(components)
-}
+

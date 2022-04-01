@@ -1,17 +1,10 @@
 package gl.ky.adeyaka.script
 
 import gl.ky.adeyaka.script.GetAs.Type.*
+import gl.ky.adeyaka.script.TokenStreamUtil.eatIfPresent
+import gl.ky.adeyaka.script.TokenStreamUtil.expect
+import gl.ky.adeyaka.script.TokenStreamUtil.isNext
 import java.util.*
-import java.util.regex.Matcher
-
-fun main() {
-    val t = """
-        特效组"adeyaka"{
-            设置a为1；b为#b；c为{Kouyou};d为“d”
-        }
-        """.trimIndent()
-    println(Parser.parseFile(t).toString())
-}
 
 // AST
 
@@ -74,155 +67,79 @@ sealed interface Expr : ASTNode {
 /**
  * 解析整个文件的 Parser
  */
-class Parser(val input: String, val rules: List<Rule>) {
+class Parser(val input: TokenStream, val rules: List<Rule>) {
     fun get(): ScriptFile = parseFile()
-
-    class ParseException(val pos: Int, val msg: String) : RuntimeException("At pos $pos : $msg")
-
-    object Keywords {
-        const val SCRIPT_GROUP = "脚本组"
-    }
-
-    private var offset = 0
-    private var savepoint: Stack<Int> = Stack()
-
-    private inline fun save() { savepoint.push(offset) }
-    private inline fun recover() { offset = savepoint.pop() }
-    private inline fun cancel() { savepoint.pop() }
-    private inline fun hasMore() = offset < input.length
-    private inline fun skipWhitespace() { while (input[offset].isWhitespace()) offset++ }
-    private inline fun expect(str: String) {
-        skipWhitespace()
-        if (isNext(str)) skip(str.length)
-            else throw ParseException(offset, "Expected $str")
-        skipWhitespace()
-    }
-    private inline fun isNext(str: String): Boolean {
-        skipWhitespace()
-        return input.startsWith(str, offset).also { skipWhitespace() }
-    }
-    private inline fun eatIfPresent(str: String): Boolean {
-        skipWhitespace()
-        if (isNext(str)) {
-            skip(str.length)
-            skipWhitespace()
-            return true
-        }
-        return false
-    }
-    private inline fun skip(i: Int) { offset += i }
 
     private fun parseFile(): ScriptFile {
         val groups = mutableListOf<ScriptGroup>()
-        while(hasMore()) {
-            groups.add(parseGroup())
+        while(input.hasNext()) {
+            groups += parseGroup()
         }
         return ScriptFile(groups)
     }
 
     private fun parseGroup(): ScriptGroup {
-        expect("脚本组")
-        val name = expectStr().value
-        expect("{")
+        input.expect(Token.Type.KW_GROUP)
+        val name = input.expect(Token.Type.ID).value
+        input.expect(Token.Type.LBRACE)
         val sens = mutableListOf<Sentence>()
-        while(input[offset] != '}') {
-            sens.add(parseSentence())
+        while(!input.isNext(Token.Type.RBRACE)) {
+            sens += parseSentence()
         }
-        expect("}")
+        input.expect(Token.Type.RBRACE)
         return ScriptGroup(name, sens)
     }
 
     private fun parseSentence(): Sentence {
         val clauses = mutableListOf<Clause>()
         do {
-            clauses.add(parseClause())
-        } while (input[offset] == '，')
+            clauses += parseClause()
+        } while (input.isNext(Token.Type.COMMA))
+        input.expect(Token.Type.EOS)
         return Sentence(clauses)
     }
 
     private fun parseClause(): Clause {
         for (rule in rules) {
-            val result = tryRule(rule)
-            if (result != null) return result
+            tryRule(rule)?.let { return it }
         }
-        throw ParseException(offset, "No rule matched")
+        throw RuntimeException("No rule matched")
     }
 
     private fun tryRule(rule: Rule): Clause? {
-        val words = mutableListOf<Word>()
-        for (component in rule.components) {
-            save()
-            try {
-                when(component) {
-                    is VerbMatch -> {
-                        expect(component.verb)
-                        words.add(Verb(component.verb))
-                    }
-                    is Match -> {
-                        expect(component.s)
-                    }
-                    is GetAs -> {
-                        val value = when(component.type) {
-                            ANY -> expectAny()
-                            STRING -> expectStr()
-                            NUMBER -> expectNum()
-                            BOOL -> expectBool()
-                            POSITION -> expectPos()
-                            PLAYER -> expectPlayer()
+        val result = mutableListOf<Word>()
+        input.save()
+        for (com in rule.components) {
+            when(com) {
+                is VerbMatch -> {
+                    if(!input.eatIfPresent(com.verb)) { input.restore(); return null }
+                    result += Verb(input.expect(Token.Type.ID).value)
+                }
+                is Match -> {
+                    if(!input.eatIfPresent(com.s)) { input.restore(); return null }
+                }
+                is GetAs -> {
+                    if(input.isNext(Token.Type.ID)) result += Adverb(com.name, Expr.Var(input.next().value))
+                    when(com.type) {
+                        BOOL -> {
+                            if(input.isNext(Token.Type.BOOL_TRUE)) result += Adverb(com.name, Expr.Bool.TRUE)
+                            else if(input.isNext(Token.Type.BOOL_FALSE)) result += Adverb(com.name, Expr.Bool.FALSE)
+                            else { input.restore(); return null }
                         }
-                        words.add(Adverb(component.name, value))
+                        NUMBER -> {
+                            if(input.isNext(Token.Type.NUMBER)) result += Adverb(com.name, Expr.Num(input.next().value.toDouble()))
+                            else { input.restore(); return null }
+                        }
+                        STRING -> {
+                            if(input.isNext(Token.Type.STRING)) result += Adverb(com.name, Expr.Str(input.next().value))
+                            else { input.restore(); return null }
+                        }
                     }
                 }
-            } catch (e: ParseException) {
-                recover()
-                return null
-            }
-            cancel()
+            })
         }
-        return Clause(words)
+        input.cancel()
+        return Clause(result)
     }
 
-    private fun expectAny(): Expr {
-        TODO()
-    }
-
-    private fun expectStr(): Expr.Str {
-        TODO()
-    }
-    private fun expectNum(): Expr.Num {
-        assert(input[offset] == '-' || input[offset] in '0'..'9')
-
-    }
-    private fun expectBool(): Expr.Bool {
-        return when {
-            eatIfPresent("真") -> Expr.Bool.TRUE
-            eatIfPresent("假") -> Expr.Bool.FALSE
-            eatIfPresent("是") -> Expr.Bool.TRUE
-            eatIfPresent("否") -> Expr.Bool.FALSE
-            eatIfPresent("true") -> Expr.Bool.TRUE
-            eatIfPresent("false") -> Expr.Bool.FALSE
-            else -> throw ParseException(offset, "Expected bool")
-        }
-    }
-    private fun expectPos(): Expr.Pos {
-        expect("[")
-        val x = expectNum().value
-        expect(",")
-        val y = expectNum().value
-        expect(",")
-        val z = expectNum().value
-        expect("]")
-        return Expr.Pos(x, y, z)
-    }
-    private fun expectPlayer(): Expr.Player {
-        expect("{")
-        val name = expectStr().value
-        expect("}")
-        return Expr.Player(name)
-    }
-    private fun expectVar(): Expr.Var {
-        expect("#")
-        val name = expectStr().value
-        return Expr.Var(name)
-    }
 }
