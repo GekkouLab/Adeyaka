@@ -15,9 +15,14 @@ import gl.ky.adeyaka.script.LexUtil.isRParen
 import gl.ky.adeyaka.script.LexUtil.isSpace
 
 fun main() {
-    println(Lexer("""
-        "a"
-    """.trimIndent()).readString())
+    val script = """
+        脚本组 示例脚本 {
+            设置“甲”为 1，设置 乙 为 真，设置'丙'为 甲
+            设置 丁 为 “你好，世界！”
+        }
+    """.trimIndent()
+    val ts = Lexer(script).get()
+    println(ts)
 }
 
 
@@ -49,29 +54,19 @@ class Token(var type: Type, val value: String) {
 
         KW_GROUP,
     }
-}
 
-class TokenStream(val tokens: List<Token>) {
-    private var index = 0
-    private val savepoint = mutableListOf<Int>()
-
-    fun peek() = tokens[index]
-    fun hasNext() = index < tokens.size
-    fun next() = tokens[index++]
-
-    fun save() { savepoint.add(index) }
-    fun restore() { index = savepoint.removeLast() }
-    fun cancel() { savepoint.removeLast() }
+    override fun toString(): String {
+        return "[$type : $value]"
+    }
 }
 
 class Lexer(input: String) {
-    val input = input.trim()
-        .replace("\r", "\n")
-        .replace("\t", " ")
-
     fun get() = lex()
 
-    var offset = 0
+    private val input = input.trim()
+        .replace("\r", "\n")
+
+    private var offset = 0
 
     private inline fun hasMore() = offset < input.length
     private inline fun skipWhitespace() { while (input[offset].isSpace()) offset++ }
@@ -79,28 +74,28 @@ class Lexer(input: String) {
     private inline fun skip() { offset++ }
     private inline fun skip(i: Int) { offset += i }
 
-    fun lex(): TokenStream {
+    private fun lex(): TokenStream {
         val tokens = mutableListOf<Token>()
         do {
             skipWhitespace()
             val c = input[offset]
             when {
+                c.isEOS() -> { tokens += Token(Token.Type.EOS, "\n"); skip() }
+                c.isComma() -> { tokens += Token(Token.Type.COMMA, ","); skip() }
+                c.isLParen() -> { tokens += Token(Token.Type.LPAREN, "("); skip() }
+                c.isRParen() -> { tokens += Token(Token.Type.RPAREN, ")"); skip() }
+                c.isLBracket() -> { tokens += Token(Token.Type.LBRACKET, "["); skip() }
+                c.isRBracket() -> { tokens += Token(Token.Type.RBRACKET, "]"); skip() }
+                c.isLBrace() -> { tokens += Token(Token.Type.LBRACE, "{"); skip() }
+                c.isRBrace() -> { tokens += Token(Token.Type.RBRACE, "}"); skip() }
                 c == '#' -> skipLine()
-                c.isEOS() -> tokens += Token(Token.Type.EOS, "\n")
                 c in '0'..'9' -> tokens += Token(Token.Type.NUMBER, readNumber())
-                c.isComma() -> tokens += Token(Token.Type.COMMA, ",")
-                c.isLBrace() -> tokens += Token(Token.Type.LBRACE, "{")
-                c.isRBrace() -> tokens += Token(Token.Type.RBRACE, "}")
-                c.isLBracket() -> tokens += Token(Token.Type.LBRACKET, "[")
-                c.isRBracket() -> tokens += Token(Token.Type.RBRACKET, "]")
-                c.isLParen() -> tokens += Token(Token.Type.LPAREN, "(")
-                c.isRParen() -> tokens += Token(Token.Type.RPAREN, ")")
                 c.isQuote() -> tokens += Token(Token.Type.STRING, readString())
                 c.isIdStart() -> tokens += Token(Token.Type.ID, readId())
                 else ->  throw RuntimeException("Unexpected character: $c")
             }
         } while (hasMore())
-        tokens += Token(Token.Type.EOF, "")
+        //tokens += Token(Token.Type.EOF, "")
 
         tokens.map {
             when (it.type) {
@@ -118,7 +113,7 @@ class Lexer(input: String) {
         return TokenStream(tokens)
     }
 
-    fun readString(): String {
+    private fun readString(): String {
         skip()
         val start = offset
         while (!input[offset].isQuote()) {
@@ -129,7 +124,7 @@ class Lexer(input: String) {
             }
         }
         skip()
-        return input.substring(start, offset)
+        return input.substring(start, offset - 1)
     }
 
     private fun readNumber(): String {
@@ -181,70 +176,80 @@ object LexUtil {
     @JvmStatic
     fun Char.isRParen() = this == ')' || this == '）'
     @JvmStatic
-    fun Char.isSpace() = this == ' ' || this == '\t' || this == '\n' || this == '\r' || this == '\u00A0' || this == '\u3000'
+    fun Char.isSpace() = this == ' ' || this == '\t' || this == '\u00A0' || this == '\u3000'
     @JvmStatic
     fun Char.isEOS() = this == '\n'
 }
 
+class TokenStream(private val tokens: List<Token>) {
+    var index = 0
+
+    operator fun get(i: Int = index) = tokens[i]
+    operator fun invoke(offset: Int = 0) = peek(offset)
+    fun peek(offset: Int = 0) = tokens[index + offset]
+    fun hasNext() = index < tokens.size
+    fun next() = tokens[index++]
+    fun skip(count: Int = 1) { index += count }
+
+    override fun toString(): String {
+        return "[TokenStream " + tokens.joinToString(" ") + "]"
+    }
+}
+
 object TokenStreamUtil {
     @JvmStatic
-    fun TokenStream.expect(type: Token.Type) : Token {
-        if (peek().type != type) {
-            throw RuntimeException("Expected a token of type $type, but got ${peek().type}")
-        }
-        return next()
+    fun TokenStream.skipType(vararg types: Token.Type) {
+        while(peek().type in types) skip()
     }
     @JvmStatic
-    fun TokenStream.expect(s: String) : Token {
-        if (peek().value != s) {
-            throw RuntimeException("Expected a $s, but got ${peek().value}")
-        }
-        return next()
+    fun TokenStream.match(type: Token.Type) : Token {
+        return if (peek().type == type) next() else throw RuntimeException("Expected a $type token, but got ${peek().type}")
     }
     @JvmStatic
-    fun TokenStream.expect(s: String, type: Token.Type): Token {
-        if (peek().value != s || peek().type != type) {
-            throw RuntimeException("Expected a token $s of type $type, but got ${peek().value} of type ${peek().type}")
-        }
-        return next()
+    fun TokenStream.match(s: String) : Token {
+        return if (peek().value == s) next() else throw RuntimeException("Expected a $s, but got ${peek().value}")
     }
     @JvmStatic
-    fun TokenStream.expect(vararg types: Token.Type) : Token {
-        if (peek().type !in types) {
-            throw RuntimeException("Expected a token of type one of ${types.joinToString()}, but got ${peek().type}")
-        }
-        return next()
+    fun TokenStream.match(vararg types: Token.Type) : List<Token> {
+        val tokens = mutableListOf<Token>()
+        for (type in types) if(peek().type == type) tokens += next()
+        else throw RuntimeException("Expected a $type token, but got ${peek().type}")
+        return tokens
     }
     @JvmStatic
-    fun TokenStream.isNext(type: Token.Type) = peek().type == type
+    fun TokenStream.testMatch(type: Token.Type, offset: Int = 0) = peek(offset).type == type
     @JvmStatic
-    fun TokenStream.isNext(s: String) = peek().value == s
+    fun TokenStream.testMatch(s: String, offset: Int = 0) = peek(offset).value == s
     @JvmStatic
-    fun TokenStream.isNext(s: String, type: Token.Type) = peek().value == s && peek().type == type
+    fun TokenStream.testMatch(vararg types: Token.Type, offset: Int = 0): Boolean {
+        var count = 0
+        for (type in types) if(peek(offset + count).type == type) count++
+        else return false
+        return true
+    }
     @JvmStatic
-    fun TokenStream.isNext(vararg types: Token.Type) = peek().type in types
-    @JvmStatic
-    fun TokenStream.eatIfPresent(type: Token.Type) : Boolean {
-        if (isNext(type)) {
-            next()
+    fun TokenStream.tryMatch(type: Token.Type) : Boolean {
+        if (testMatch(type)) {
+            skip()
             return true
         }
         return false
     }
     @JvmStatic
-    fun TokenStream.eatIfPresent(s: String) : Boolean {
-        if (isNext(s)) {
-            next()
+    fun TokenStream.tryMatch(s: String) : Boolean {
+        if (testMatch(s)) {
+            skip()
             return true
         }
         return false
     }
     @JvmStatic
-    fun TokenStream.eatIfPresent(s: String, type: Token.Type) : Boolean {
-        if (isNext(s, type)) {
-            next()
+    fun TokenStream.tryMatch(vararg types: Token.Type) : Boolean {
+        if (testMatch(*types)) {
+            skip(types.size)
             return true
         }
         return false
     }
+
 }
