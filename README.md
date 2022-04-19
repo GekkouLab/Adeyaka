@@ -39,7 +39,7 @@
 
 ## 许可证
 
-### Adeyaka 使用 LGPL 许可证
+### Adeyaka 使用 MIT 许可证
 
 ```
 MIT License
