@@ -1,18 +1,18 @@
-package gl.ky.adeyaka.script
+package gl.ky.adeyaka.old
 
-import gl.ky.adeyaka.script.LexUtil.isComma
-import gl.ky.adeyaka.script.LexUtil.isEOS
-import gl.ky.adeyaka.script.LexUtil.isIdChar
-import gl.ky.adeyaka.script.LexUtil.isIdStart
-import gl.ky.adeyaka.script.LexUtil.isLBrace
-import gl.ky.adeyaka.script.LexUtil.isLBracket
-import gl.ky.adeyaka.script.LexUtil.isLParen
-import gl.ky.adeyaka.script.LexUtil.isNumber
-import gl.ky.adeyaka.script.LexUtil.isQuote
-import gl.ky.adeyaka.script.LexUtil.isRBrace
-import gl.ky.adeyaka.script.LexUtil.isRBracket
-import gl.ky.adeyaka.script.LexUtil.isRParen
-import gl.ky.adeyaka.script.LexUtil.isSpace
+import gl.ky.adeyaka.old.LexUtil.isComma
+import gl.ky.adeyaka.old.LexUtil.isEOS
+import gl.ky.adeyaka.old.LexUtil.isIdChar
+import gl.ky.adeyaka.old.LexUtil.isIdStart
+import gl.ky.adeyaka.old.LexUtil.isLBrace
+import gl.ky.adeyaka.old.LexUtil.isLBracket
+import gl.ky.adeyaka.old.LexUtil.isLParen
+import gl.ky.adeyaka.old.LexUtil.isNumber
+import gl.ky.adeyaka.old.LexUtil.isQuote
+import gl.ky.adeyaka.old.LexUtil.isRBrace
+import gl.ky.adeyaka.old.LexUtil.isRBracket
+import gl.ky.adeyaka.old.LexUtil.isRParen
+import gl.ky.adeyaka.old.LexUtil.isSpace
 
 fun main() {
     val script = """

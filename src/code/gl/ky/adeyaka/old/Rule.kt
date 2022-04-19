@@ -1,6 +1,6 @@
-package gl.ky.adeyaka.script
+package gl.ky.adeyaka.old
 
-import gl.ky.adeyaka.script.Rule.Companion.toRule
+import gl.ky.adeyaka.old.Rule.Companion.toRule
 
 fun main() {
     println(("{设置} <name:string> 为 <value:any>").toRule())

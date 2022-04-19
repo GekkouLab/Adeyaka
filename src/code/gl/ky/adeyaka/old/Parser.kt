@@ -1,10 +1,10 @@
-package gl.ky.adeyaka.script
+package gl.ky.adeyaka.old
 
-import gl.ky.adeyaka.script.RuleComponent.MatchAsAdverb.Type.*
-import gl.ky.adeyaka.script.TokenStreamUtil.match
-import gl.ky.adeyaka.script.TokenStreamUtil.testMatch
-import gl.ky.adeyaka.script.TokenStreamUtil.tryMatch
-import gl.ky.adeyaka.script.TokenStreamUtil.skipType
+import gl.ky.adeyaka.old.RuleComponent.MatchAsAdverb.Type.*
+import gl.ky.adeyaka.old.TokenStreamUtil.match
+import gl.ky.adeyaka.old.TokenStreamUtil.testMatch
+import gl.ky.adeyaka.old.TokenStreamUtil.tryMatch
+import gl.ky.adeyaka.old.TokenStreamUtil.skipType
 
 fun main() {
     val rules = Rule.fromStrings(
