@@ -1,6 +1,6 @@
 package gl.ky.adeyaka.script
 
-interface Rule
+typealias Rule = RuleNode.Seq
 
 sealed interface RuleNode {
     class Seq(val nodes: List<RuleNode>) : RuleNode
