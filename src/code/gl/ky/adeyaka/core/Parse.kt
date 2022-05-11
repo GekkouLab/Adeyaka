@@ -1,8 +1,26 @@
-package gl.ky.adeyaka.script
+package gl.ky.adeyaka.core
 
-import gl.ky.adeyaka.script.Parser.CharUtil.isEOS
-import gl.ky.adeyaka.script.Parser.ParseUtil.match
-import gl.ky.adeyaka.script.Parser.ParseUtil.matchIfPresent
+import gl.ky.adeyaka.core.Parser.CharUtil.isEOS
+import gl.ky.adeyaka.core.Parser.ParseUtil.match
+import gl.ky.adeyaka.core.Parser.ParseUtil.matchIfPresent
+
+interface ActionParser {
+    /**
+     * try to parse some tokens and return an action
+     * @return the action if successful, null otherwise, if failed, tokens won't be really consumed.
+     */
+    fun parse(input: TokenStream): Action?
+}
+
+interface LiteralParser<T> {
+    /**
+     * try to parse some tokens and return a value
+     * @return the value if successful, null otherwise, if failed, tokens won't be really consumed.
+     */
+    fun parse(input: TokenStream): T?
+
+}
+
 
 class Parser(val rules: List<Rule>) {
     class ParseException(message: String) : RuntimeException(message)

@@ -1,4 +1,4 @@
-package gl.ky.adeyaka.script
+package gl.ky.adeyaka.core
 
 typealias Rule = RuleNode.Seq
 

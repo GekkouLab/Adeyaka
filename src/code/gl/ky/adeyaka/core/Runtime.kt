@@ -1,4 +1,16 @@
-package gl.ky.adeyaka.script
+package gl.ky.adeyaka.core
+
+import org.bukkit.Location
+import org.bukkit.OfflinePlayer
+
+class Environment {
+    var player: OfflinePlayer? = null
+    var location: Location? = null
+}
+
+interface Action {
+    fun execute(env: Environment): Unit
+}
 
 typealias Verb = (Scope) -> Unit
 
@@ -8,6 +20,7 @@ interface AValue {
     class ABoolean(val value: Boolean) : AValue
 
     companion object {
+        /**
         @JvmStatic
         fun wrap(value: AstNode.Value): AValue {
             return when (value) {
@@ -17,6 +30,17 @@ interface AValue {
                 is AstNode.LocationValue -> TODO()
             }
         }
+        */
+        @JvmStatic
+        fun wrap(value: AstNode.Value): Any {
+            return when (value) {
+                is AstNode.NumberValue -> value.value
+                is AstNode.StringValue -> value.value
+                is AstNode.BooleanValue -> value.value
+                is AstNode.LocationValue -> TODO()
+            }
+        }
+
     }
 }
 

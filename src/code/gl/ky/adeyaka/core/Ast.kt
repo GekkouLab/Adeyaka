@@ -1,4 +1,4 @@
-package gl.ky.adeyaka.script
+package gl.ky.adeyaka.core
 
 sealed interface AstNode {
     class Segment(val sentences: List<Sentence>) : AstNode
