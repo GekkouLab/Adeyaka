@@ -2,6 +2,7 @@ package gl.ky.adeyaka.core
 
 import org.bukkit.Location
 import org.bukkit.OfflinePlayer
+import kotlin.math.abs
 
 class Environment() {
     constructor(parent: Environment) : this() {
@@ -27,4 +28,27 @@ class Sentence(val actions: List<Action>) {
 
 interface Action {
     fun execute(env: Environment): Unit
+}
+
+/**
+ * values unable to get actually at parse time
+ */
+interface RuntimeValue<T> {
+    fun get(env: Environment): T
+
+    companion object {
+        fun <T> of(value: RuntimeValue<T>) = value
+        fun <T> of(value: T) = ConstValue(value)
+    }
+
+    /**
+     * transform value at runtime
+     */
+    abstract class Transformer<T>(val value: RuntimeValue<*>): RuntimeValue<T> {
+        abstract override fun get(env: Environment): T
+    }
+
+    class ConstValue<T>(val value: T) : RuntimeValue<T> {
+        override fun get(env: Environment) = value
+    }
 }

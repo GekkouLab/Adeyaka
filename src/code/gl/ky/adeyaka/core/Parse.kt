@@ -1,8 +1,5 @@
 package gl.ky.adeyaka.core
 
-import gl.ky.adeyaka.core.Parser.CharUtil.isEOS
-import gl.ky.adeyaka.core.Parser.ParseUtil.match
-
 interface ActionParser {
     /**
      * try to parse some tokens and return an action
@@ -13,13 +10,35 @@ interface ActionParser {
 
 interface LiteralParser<T> {
     /**
-     * try to parse some tokens and return a value
+     * try to parse tokens and return a CONSTANT VALUE
      * @return the value if successful, null otherwise, if failed, tokens won't be really consumed.
      */
     fun parse(input: TokenStream): T?
-
 }
 
+interface ValueParser<T> {
+    /**
+     * try to parse tokens and return a runtime-sure value
+     * @return the value if successful, null otherwise, if failed, tokens won't be really consumed.
+     */
+    fun parse(input: TokenStream): RuntimeValue<T>?
+}
+
+interface PrefixParser<T> {
+    /**
+     * try to parse tokens before a value and return a transformer
+     * @return the value if successful, null otherwise, if failed, tokens won't be really consumed.
+     */
+    fun parse(input: TokenStream): RuntimeValue.Transformer<T>?
+}
+
+interface SuffixParser<T> {
+    /**
+     * try to parse tokens after a value and return a transformer
+     * @return the value if successful, null otherwise, if failed, tokens won't be really consumed.
+     */
+    fun parse(input: TokenStream): RuntimeValue.Transformer<T>?
+}
 
 class Parser(val actionParsers: List<ActionParser>, val literalParsers: Map<*, List<LiteralParser<*>>>) {
     private fun parse(source: TokenStream): List<Segment> {
@@ -54,6 +73,34 @@ class Parser(val actionParsers: List<ActionParser>, val literalParsers: Map<*, L
         }
         throw RuntimeException("unable to parse")
     }
+
+    private fun parseValue(source: TokenStream): RuntimeValue<*> {
+        TODO()
+    }
+
+    private fun parsePrefix(source: TokenStream): RuntimeValue<*> {
+        TODO()
+    }
+
+    private fun parseSuffix(source: TokenStream): RuntimeValue<*> {
+        TODO()
+    }
+
+    private fun parseString(source: TokenStream): String {
+        TODO()
+    }
+
+    private fun parseBoolean(source: TokenStream): Boolean {
+        TODO()
+    }
+
+    private fun parseNumber(source: TokenStream): Double {
+        TODO()
+    }
+
+
+
+}
 
     object ParseUtil {
         @JvmStatic
